@@ -74,16 +74,34 @@ translator, (e.g., `baidu_translate()`, `bing_translate()`,
 
 ### to use `bing` translate:
 
-1.  regist a free azure account
-2.  enable `Azure AI services | Translator` from
-    <https://portal.azure.com/>
-3.  create a translation service with free tier pricing version (you
-    need a visa/master card to complete registion and will not be
-    charged until exceed 2 million characters monthly)
-4.  get your `key` and `region`
-5.  set `key` and `region` with `source = "bing"` using
-    `set_translate_option()`
-6.  have fun with `bing_translate()`
+## Steps to Register and Use Azure Translator with the Free Tier
+
+1. **Register a free Azure account**  
+   Visit the Azure portal at https://portal.azure.com/ and create a free account. A valid Visa or MasterCard is required for verification. You will not be charged unless your usage exceeds the free tier limits.
+
+2. **Enable Azure AI Services | Translator**  
+   After signing in, go to **Azure AI Services** and select **Translator**.
+
+3. **Create a Translator resource using the free tier**  
+   - Click **Create a resource**  
+   - Search for **Translator**  
+   - Choose the **Free (F0)** pricing tier (includes up to 2 million characters per month at no cost)  
+   - Complete the deployment
+
+4. **Retrieve your key and region**  
+   - Open the deployed Translator resource  
+   - Go to **Keys and Endpoint**  
+   - Copy your **key** and **region**
+
+5. **Configure your environment**  
+   Set your translation source and credentials:
+   ```r
+   set_translate_option(
+     source = "bing",
+     key = "<YOUR_KEY>",
+     region = "<YOUR_REGION>"
+   )
+    ```
 
 ### to use `youdao`(有道智云) translate:
 

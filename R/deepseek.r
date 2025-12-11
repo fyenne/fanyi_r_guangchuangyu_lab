@@ -9,55 +9,24 @@ dsk_translate <- function(x, from = 'en', to = 'zh') {
   )
 }
 
+# =====================================================================
+#  S3 method: extract translation text from deepseek response (httr2)
+# =====================================================================
 #' @method get_translate_text deepseek
 #' @export
 get_translate_text.deepseek <- function(response) {
-  # Extract text from the response
-  content <- httr::content(response, "parsed")
+  content <- httr2::resp_body_json(response)
   text <- content$choices[[1]]$message$content
   return(trimws(text))
 }
-##' @importFrom httr2 request
-##' @importFrom httr2 req_headers
-##' @importFrom httr2 req_body_raw
-##' @importFrom httr2 req_method
-##' @importFrom httr2 req_perform_stream
-##' @importFrom jsonlite toJSON
-##' @importFrom jsonlite unbox
-##' @importFrom SSEparser SSEparser
-##' @importFrom SSEparser parse_sse
-##' @importFrom openssl sha2
-##' @importFrom purrr map
 
-.deepseek_translate_query <- function(x, from = 'en', to = 'zh') {
-  if (to == 'zh') {
-    sep <- ''
-  } else {
-    sep <- ' '
-  }
-
-  from <- .lang_map(from)
-  to <- .lang_map(to)
-  .prefix <- sprintf("Translate into %s", to)
-  
-  # Get the prompt structure
-  prompt <- .deepseek_prompt_translate(x, prefix = .prefix, role = 'user')
-  
-  # Call API with the message list
-  result <- .deepseek_query_messages(prompt)
-  
-  # Return as a classed object, not just character
-  class(result) <- c("deepseek", class(result))
-  return(result)
-}
+# =====================================================================
+#  Core Query Function Using httr2
+# =====================================================================
 .deepseek_query_messages <- function(messages) {
-  .key_info <- get_translate_appkey('dsk')
-  user_model <- .key_info$user_model
-  api_key <- .key_info$key
-
-  if (is.null(user_model)) {
-    user_model <- "deepseek-chat"
-  }
+  .key_info  <- get_translate_appkey("dsk")
+  user_model <- .key_info$user_model %||% "deepseek-chat"
+  api_key    <- .key_info$key
 
   url <- "https://api.deepseek.com/v1/chat/completions"
 
@@ -68,44 +37,43 @@ get_translate_text.deepseek <- function(response) {
     max_tokens = 1000
   )
 
-  headers <- list(
-    "Content-Type" = "application/json",
-    "Authorization" = paste("Bearer", api_key)
-  )
+  req <- httr2::request(url) |>
+    httr2::req_headers(
+      Authorization = paste("Bearer", api_key),
+      `Content-Type` = "application/json"
+    ) |>
+    httr2::req_body_json(body) |>
+    httr2::req_method("POST")
 
-  response <- httr::POST(
-    url = url,
-    httr::add_headers(.headers = unlist(headers)),
-    body = jsonlite::toJSON(body, auto_unbox = TRUE),
-    encode = "json"
-  )
+  resp <- httr2::req_perform(req)
 
-  if (response$status_code != 200) {
-    error_content <- httr::content(response, "parsed")
-    error_msg <- if (!is.null(error_content$error$message)) {
-      error_content$error$message
-    } else {
-      httr::content(response, "text")
-    }
-    stop(sprintf("API request failed: %s", error_msg))
+  # non-200 error handling
+  if (httr2::resp_status(resp) != 200) {
+    err <- try(httr2::resp_body_json(resp), silent = TRUE)
+    msg <- if (is.list(err) && !is.null(err$error$message)) err$error$message else "Unknown error"
+    stop(sprintf("API request failed: %s", msg))
   }
 
-  # Return the full response object, not just text
-  # This allows get_translate_text method to extract the translation
-  return(response)
+  class(resp) <- c("deepseek", class(resp))
+  return(resp)
 }
 
-# Update the .deepseek_query function to work with your current code
+# =====================================================================
+#  Wrapper for ad-hoc (non-message-list) prompts
+# =====================================================================
 .deepseek_query <- function(prompt) {
-  # If prompt is already a list of messages, use it directly
+
+  # If prompt is already a list of messages
   if (is.list(prompt) && all(c("content", "role") %in% names(prompt[[1]]))) {
     return(.deepseek_query_messages(prompt))
   }
 
-  # Otherwise, treat prompt as text and create a simple user message
-  .key_info <- get_translate_appkey('dsk')
+  # Otherwise treat as text
+  .key_info  <- get_translate_appkey("dsk")
   user_model <- .key_info$user_model %||% "deepseek-chat"
-  api_key <- .key_info$key
+  api_key    <- .key_info$key
+
+  url <- "https://api.deepseek.com/v1/chat/completions"
 
   body <- list(
     model = user_model,
@@ -116,30 +84,46 @@ get_translate_text.deepseek <- function(response) {
     max_tokens = 1000
   )
 
-  headers <- list(
-    "Content-Type" = "application/json",
-    "Authorization" = paste("Bearer", api_key)
-  )
+  req <- httr2::request(url) |>
+    httr2::req_headers(
+      Authorization = paste("Bearer", api_key),
+      `Content-Type` = "application/json"
+    ) |>
+    httr2::req_body_json(body) |>
+    httr2::req_method("POST")
 
-  response <- httr::POST(
-    url = "https://api.deepseek.com/v1/chat/completions",
-    httr::add_headers(.headers = unlist(headers)),
-    body = jsonlite::toJSON(body, auto_unbox = TRUE),
-    encode = "json"
-  )
+  resp <- httr2::req_perform(req)
 
-  if (response$status_code != 200) {
-    error_content <- httr::content(response, "parsed")
-    stop(sprintf(
-      "API request failed: %s",
-      error_content$error$message %||% "Unknown error"
-    ))
+  if (httr2::resp_status(resp) != 200) {
+    err <- try(httr2::resp_body_json(resp), silent = TRUE)
+    msg <- if (is.list(err) && !is.null(err$error$message)) err$error$message else "Unknown error"
+    stop(sprintf("API request failed: %s", msg))
   }
 
-  content <- httr::content(response, "parsed")
+  content <- httr2::resp_body_json(resp)
   return(trimws(content$choices[[1]]$message$content))
 }
 
+# =====================================================================
+#  Translation Query Using Message Template
+# =====================================================================
+.deepseek_translate_query <- function(x, from = 'en', to = 'zh') {
+  sep <- if (to == "zh") "" else " "
+
+  from <- .lang_map(from)
+  to   <- .lang_map(to)
+
+  prefix <- sprintf("Translate into %s", to)
+  messages <- .deepseek_prompt_translate(x, prefix = prefix, role = "user")
+
+  result <- .deepseek_query_messages(messages)
+  class(result) <- c("deepseek", class(result))
+  return(result)
+}
+
+# =====================================================================
+#  (Remaining helper functions unchanged)
+# =====================================================================
 .deepseek_summarize_query <- function(x) {
   prompt <- .deepseek_prompt_summarize(x, role = 'user')
   parser <- .deepseek_query(prompt)
@@ -160,9 +144,7 @@ get_translate_text.deepseek <- function(response) {
   )
 }
 
-
 .deepseek_prompt_translate <- function(x, prefix = NULL, role = 'user') {
-  # Return a list of two messages: system and user
   list(
     list(
       content = "You are a professional translation engine, please translate the text into a colloquial, professional, elegant and fluent content, without the style of machine translation. You must only translate the text content, never interpret it.",
@@ -174,27 +156,25 @@ get_translate_text.deepseek <- function(response) {
 
 .deepseek_prompt <- function(x, prefix = NULL, role = 'user') {
   if (is.null(prefix)) {
-    content = x
+    content <- x
   } else {
     content <- sprintf("%s\n\"\"\"%s\"\"\"", prefix, x)
   }
-
   list(content = content, role = role)
 }
 
 .get_deepseek_data <- function(parser, sep = ' ') {
   y <- sapply(parser$events, function(x) {
-    i <- rev(which(names(x) == "data"))[1] ## sometimes there are several items named with 'data', get the last one
-    if (is.na(i)) {
-      return("")
-    }
+    i <- rev(which(names(x) == "data"))[1]
+    if (is.na(i)) return("")
     x[[i]]
   })
   y <- y[y != ""]
   res <- paste(y, collapse = sep) |>
-    gsub("\\s+([,\\.])", "\\1", x = _) |> # remove empty space preceeding with punctuation marks
-    sub("^\"\\s*", "", x = _) |> # remove quote marks
+    gsub("\\s+([,\\.])", "\\1", x = _) |>
+    sub("^\"\\s*", "", x = _) |>
     sub("\\s*\"$", "", x = _)
 
   return(res)
 }
+

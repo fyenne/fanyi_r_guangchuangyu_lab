@@ -74,8 +74,6 @@ translator, (e.g., `baidu_translate()`, `bing_translate()`,
 
 ### to use `bing` translate:
 
-## Steps to Register and Use Azure Translator with the Free Tier
-
 1. **Register a free Azure account**  
    Visit the Azure portal at https://portal.azure.com/ and create a free account. A valid Visa or MasterCard is required for verification. You will not be charged unless your usage exceeds the free tier limits.
 
